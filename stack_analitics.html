@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    table {
+      border-collapse: collapse;
+    }
+
+    th, td {
+      border: 1px solid black;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+ <button class="dwnld" onclick="downloadCSV('data')">Скачать</button>
+ <button class="clear" id="clear-button">Очистить локальное хранилище</button>
+  <table id="data-table">
+    <thead>
+      <tr>
+        <th>Дата</th>
+        <th>Диспансеризация</th>
+        <th>Военкомат</th>
+        <th>Медкомиссия</th>
+      </tr>
+    </thead>
+    <tbody>
+    </tbody>
+  </table>
+
+  <script>
+// Получение данных из локального хранилища
+var localStorageData = localStorage;
+
+// Функция для создания и заполнения ячеек таблицы
+function createTableCell(text) {
+  var cell = document.createElement("td");
+  cell.textContent = text;
+  return cell;
+}
+
+// Получение таблицы
+var table = document.getElementById("data-table");
+
+// Получение тела таблицы
+var tbody = table.querySelector("tbody");
+
+// Обход данных из локального хранилища и создание строк таблицы
+var dataByDateAndType = {};
+
+// Разложение данных по датам и типам записей
+Object.entries(localStorageData).forEach(function([key, value]) {
+  var parts = key.split('_');
+  var date = parts[0];
+  var type = parts[1];
+
+  if (!dataByDateAndType[date]) {
+    dataByDateAndType[date] = {};
+  }
+
+  dataByDateAndType[date][type] = value;
+});
+
+// Создание строк таблицы на основе разложенных данных
+var rows = [];
+Object.entries(dataByDateAndType).forEach(function([date, values]) {
+  if (values["ME"] || values["MEO"] || values["PSC"]) {
+    var row = document.createElement("tr");
+
+    // Изменение формата даты в ячейке dateCell
+    var dateParts = date.split(".");
+    var formattedDate = dateParts[2] + "-" + dateParts[1] + "-" + dateParts[0];
+    var dateCell = createTableCell(formattedDate);
+
+    var meCell = createTableCell(values["ME"] || "");
+    var meoCell = createTableCell(values["MEO"] ? 40 - parseInt(values["MEO"]) : "");
+    var pscCell = createTableCell(values["PSC"] ? 30 - parseInt(values["PSC"]) : "");
+
+    row.appendChild(dateCell);
+    row.appendChild(meCell);
+    row.appendChild(meoCell);
+    row.appendChild(pscCell);
+
+    rows.push(row);
+  }
+});
+
+// Сортировка строк по датам в порядке возрастания
+rows.sort(function(row1, row2) {
+  var date1 = row1.firstChild.textContent;
+  var date2 = row2.firstChild.textContent;
+  return new Date(date1) - new Date(date2);
+});
+
+// Добавление отсортированных строк в таблицу
+rows.forEach(function(row) {
+  tbody.appendChild(row);
+});
+function downloadCSV(filename) {
+  // Получаем таблицу по id
+  var table = document.getElementById("data-table");
+  var rows = [];
+
+  // Проходимся по строкам таблицы и получаем значения ячеек
+  for (var i = 0; i < table.rows.length; i++) {
+    var rowCells = [];
+    for (var j = 0; j < table.rows[i].cells.length; j++) {
+      rowCells.push('"' + table.rows[i].cells[j].innerText.replace(/"/g, '""') + '"');
+    }
+    rows.push(rowCells.join(";")); // Разделяем значения ячеек символом ";"
+  }
+  const now = new Date();
+  const day = String(now.getDate()).padStart(2, '0');
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const year = now.getFullYear();
+  const filedate = "Аналитика от "+day + '.' + month + '.' + year;
+  // Создаем ссылку и генерируем файл CSV
+  var csvContent = "\uFEFF" + rows.join("\r\n"); // Добавляем BOM-символ для кодировки cp1251
+  var link = document.createElement("a");
+  link.setAttribute("href", "data:text/csv;charset=cp1251," + encodeURIComponent(csvContent));
+  link.setAttribute("download", filedate + ".csv");
+  link.click();
+}
+// Найдите кнопку на странице
+const clearButton = document.querySelector('#clear-button');
+
+// Добавьте обработчик событий клика на кнопку
+clearButton.addEventListener('click', function() {
+  downloadCSV('data');
+  localStorage.clear();
+  location.reload();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+	<meta charset="UTF-8">
+	<title></title>
+	<script type="text/javascript">
+
+		let GlobalShift = 0; 
+		let Global_PSC_Submenu_Timer;
+
+		const voenkomat_work_time = 960; // предельное время работы кнопок военкомата
+		const voenkomat_work_date = 5;
+		const voenkomat_work_start = 470; // время начала работы кабинета
+		const voenkomat = 40;
+
+		const disp_work_time = 1200; // работает до 20:00
+		const disp_work_date = 6; // работает 6 дней в неделю
+		const disp_work_start = 470; // в будние начинает работать с 7:50
+		const disp_sub_work_time = 720; // в субботу работает до 15:00
+		const disp_sub_work_start = 530; // в субботу работает с 8:50
+
+		const medcom_work_time = 960; // предельное время работы кабинета платных услуг
+		const medcom_work_date = 5;
+		const medcom_work_start = 470; // время начала работы кабинета
+		const medcom = 30;
+
+		document.addEventListener('DOMContentLoaded', () => {
+			document.addEventListener('gesturestart', function(e) {
+   				e.preventDefault();
+			});
+			document.addEventListener('touchmove', function(event) {
+			    if (event.scale !== 1) {
+			        event.preventDefault();
+			    }
+			}, { passive: false });
+ 			ShowDate();
+ 			InititalizeCounter(); //инициализируем счётчики при запуске
+ 			setInterval(ShowTime, 1000); // запускаем отрисовку времени, обновление каждую секунду
+ 			setInterval(ShowDate, 1000*60*10); // запускаем отрисовку даты и дня недели, обновляем каждые 10 минут
+		});
+		function getRussianDayOfWeek()  // получаем день недели на русском
+		{
+			const now = new Date();
+			const options = { weekday: 'long' };
+			const formatter = new Intl.DateTimeFormat('ru-RU', options);
+			const dayOfWeek = formatter.format(now);
+			return dayOfWeek.charAt(0).toUpperCase() + dayOfWeek.slice(1);
+		}
+		function getRussianDate() // получаем дату на русском
+		{
+			const now = new Date();
+			const options = { year: 'numeric', month: 'long', day: 'numeric' };
+			const formatter = new Intl.DateTimeFormat('ru-RU', options);
+			return formatter.format(now);
+		}
+		function getTime() // получаем текущее время
+		{
+			const now = new Date();
+			const options = { hour: 'numeric', minute: 'numeric', second: 'numeric' };
+			const formatter = new Intl.DateTimeFormat('ru-RU', options);
+			return formatter.format(now);
+		}
+		function getTimeInMinutesFromMidnight() 
+		{
+			const now = new Date();
+			const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+			const diffInMinutes = (now.getTime() - midnight.getTime()) / (1000 * 60);
+			return diffInMinutes;
+		}
+		function getCurrentDate() // получаем текущую дату в формате dd.mm.yyyy, используется для идентификации объектов в localStorage
+		{
+			const now = new Date();
+			const day = String(now.getDate()).padStart(2, '0');
+			const month = String(now.getMonth() + 1).padStart(2, '0');
+			const year = now.getFullYear();
+		 	return day + '.' + month + '.' + year;
+		}
+		function convertTime(minutes) 
+		{
+			const date = new Date(minutes * 60 * 1000);
+			const hours = date.getUTCHours();
+			const minutesFormatted = ('0' + date.getUTCMinutes()).slice(-2);
+			const secondsFormatted = ('0' + date.getUTCSeconds()).slice(-2);
+			return `${hours}:${minutesFormatted}:${secondsFormatted}`;
+		}
+		function InititalizeCounter() // инициализация счётчиков
+		{
+			let military_enlistment_office = localStorage.getItem(getCurrentDate()+'_MEO'); // счётчик военкомата на текущую дату
+			let medical_examination = localStorage.getItem(getCurrentDate()+'_ME'); // счётчик диспансеризации на текущую дату
+			let paid_services_counter = localStorage.getItem(getCurrentDate()+'_PSC'); // счётчик платных услуг на текущую дату
+
+			if (military_enlistment_office == null || military_enlistment_office == "NaN") 
+			{
+				localStorage.setItem(getCurrentDate()+'_MEO', voenkomat); // на день выдаём 40 талонов
+			}
+			
+			if (medical_examination == null || medical_examination == "NaN") 
+			{
+				localStorage.setItem(getCurrentDate()+'_ME', 0); // ведем подсчёт от 0 для статистики, количество не ограничено
+			}
+
+			if (paid_services_counter == null || paid_services_counter == "Nan") 
+			{
+				localStorage.setItem(getCurrentDate()+'_PSC', medcom); // на день выдаём 30 талонов
+			}
+			
+		}
+		function Chech_DateTime_And_Counters() //2312
+		{
+			const now = new Date();
+			const dayOfWeek = now.getDay(); //день недели 1-6,0
+			const timeInMinutes = getTimeInMinutesFromMidnight(); // текущее время в минутах
+			let military_enlistment_office = localStorage.getItem(getCurrentDate()+'_MEO'); // сколько талонов осталось по военкомату
+			let paid_services_counter = localStorage.getItem(getCurrentDate()+'_PSC'); // сколько талонов осталось по медкомисии
+
+			switch (dayOfWeek) 
+			{
+				case 0:
+					Disabled_button('MEO');
+					Disabled_button('ME');
+					Disabled_button('PSC');
+					Show_Coupon_Counter('PSC',3);
+					Show_Coupon_Counter('MEO',3);
+					Show_Coupon_Counter('ME',3);
+					
+					break; 
+				case 1:	
+				case 2:
+				case 3:
+				case 4:
+				case 5:
+					if (disp_work_start <= timeInMinutes) //ME
+					{
+						if(timeInMinutes >= disp_work_time)
+						{
+							Disabled_button('ME');
+							Show_Coupon_Counter('ME',2,disp_work_time);
+						}
+						else
+						{
+							Enabled_button('ME');
+							Show_Coupon_Counter('ME',2,disp_work_time);
+						}
+					}
+					else
+					{
+						Disabled_button('ME');
+						Show_Coupon_Counter('ME',1,disp_work_start);
+					}
+					if (voenkomat_work_start <= timeInMinutes) //MEO
+					{
+						if(timeInMinutes >= voenkomat_work_time)
+						{
+							Disabled_button('MEO');
+							Show_Coupon_Counter('MEO',2,voenkomat_work_time);
+						}
+						else
+						{
+							if (military_enlistment_office <= 0) 
+							{
+								Disabled_button('MEO');
+							}
+							else
+							{
+								Enabled_button('MEO');
+								Show_Coupon_Counter('MEO',0);
+							}
+						}
+					}
+					else
+					{
+						Disabled_button('MEO');
+						Show_Coupon_Counter('MEO',1,voenkomat_work_start);
+					}
+					if (medcom_work_start <= timeInMinutes) //PSC
+					{
+						if(timeInMinutes >= medcom_work_time)
+						{
+							Disabled_button('PSC');
+							Show_Coupon_Counter('PSC',2,medcom_work_time);
+						}
+						else
+						{
+							if (paid_services_counter <= 0) 
+							{
+								Disabled_button('PSC');
+							}
+							else
+							{
+								Enabled_button('PSC');
+								Show_Coupon_Counter('PSC',0);
+							}
+						}
+					}
+					else
+					{
+						Disabled_button('PSC');
+						Show_Coupon_Counter('PSC',1,medcom_work_start);
+					}
+					break;
+				case 6:
+					Disabled_button('MEO');
+					Disabled_button('PSC');
+					Show_Coupon_Counter('MEO',3);
+					Show_Coupon_Counter('PSC',3);
+						if (disp_sub_work_start <= timeInMinutes) // время начала больше, чем текущее запускаем кабинет
+						{
+							if(timeInMinutes >= disp_sub_work_time) // время конца меньше, чем текущее выключаем кабинет
+							{
+								Disabled_button('ME');
+								Show_Coupon_Counter('ME',2,disp_sub_work_time);
+							}
+							else
+							{
+								Enabled_button('ME');
+								Show_Coupon_Counter('ME',2,disp_sub_work_time);
+							}
+						}
+						else
+						{
+							Disabled_button('ME');
+							Show_Coupon_Counter('ME',1,disp_sub_work_start);
+						}
+					break;
+			}
+
+		}
+		function Disabled_button(name) // 2312
+		{
+			for (var i = 0; i < document.querySelectorAll('._'+name).length; i++) 
+			{
+				document.querySelectorAll('._'+name)[i].disabled = true;
+			}
+		}
+		function Enabled_button(name) // 2312
+		{
+			for (var i = 0; i < document.querySelectorAll('._'+name).length; i++) 
+			{
+				document.querySelectorAll('._'+name)[i].disabled = false;
+			}
+		}
+		function Show_Coupon_Counter(name,type,time = 0) // 2312
+		{
+			let cnt;
+			switch(type)
+			{
+				case 0:
+					document.querySelector('.counter_'+name).innerText = localStorage.getItem(getCurrentDate()+'_'+name);
+					document.querySelector('.label_'+name).innerText = 'Осталось талонов:';
+					break;
+				case 1:
+					cnt = convertTime(time);
+					document.querySelector('.counter_'+name).innerText = '';
+					document.querySelector('.label_'+name).innerText = 'Кабинет работает c '+cnt+'';
+					break;
+				case 2:
+					cnt = convertTime(time);
+					document.querySelector('.counter_'+name).innerText = '';
+					document.querySelector('.label_'+name).innerText = 'Кабинет работает до '+cnt+'';
+					break;
+				case 3:
+
+					document.querySelector('.counter_'+name).innerText = '';
+					document.querySelector('.label_'+name).innerText = 'Сегодня кабинет не работает';
+					break;
+			}
+		}
+		function Get_MEO_Coupon() // выдаём талон для военкомата
+		{
+			let military_enlistment_office = parseInt(localStorage.getItem(getCurrentDate()+'_MEO'));
+			localStorage.setItem(getCurrentDate()+'_MEO', military_enlistment_office-1); // при выдаче талона, уменьшаем счётчик
+			military_enlistment_office = parseInt(localStorage.getItem(getCurrentDate()+'_MEO'));
+			//Show_Coupon_Conters('_MEO',localStorage.getItem(getCurrentDate()+'_MEO'));
+			//MEO_Coupun_Show_Coutner();
+			let Coupon = 'В-'+Math.abs(military_enlistment_office-voenkomat);
+			let Service = document.activeElement.innerText;
+			let Room = document.activeElement.previousElementSibling.innerText;
+			if (parseInt(localStorage.getItem(getCurrentDate()+'_MEO')) <= 0) 
+			{
+				Disabled_MEO_button();
+			}
+			GeneratePrintForm(Coupon,Service,Room,0);
+		}
+		function Get_ME_Coupon() // выдаём талон для диспансеризации
+		{
+			let medical_examination = parseInt(localStorage.getItem(getCurrentDate()+'_ME'));
+			localStorage.setItem(getCurrentDate()+'_ME', medical_examination+1); // при выдаче талона, увеличиваем счётчик
+			medical_examination = parseInt(localStorage.getItem(getCurrentDate()+'_ME'));
+			let Coupon = 'Д-'+medical_examination;
+			GeneratePrintForm(Coupon,'','Диспансеризация',1);
+		}
+		function Get_PSC_Coupon() // выдаём талон для платных услуг
+		{
+			let paid_services_counter = parseInt(localStorage.getItem(getCurrentDate()+'_PSC'));
+			localStorage.setItem(getCurrentDate()+'_PSC', paid_services_counter-1); // при выдаче талона, уменьшаем счётчик
+			paid_services_counter = parseInt(localStorage.getItem(getCurrentDate()+'_PSC'));
+			//Show_Coupon_Conters('_PSC',localStorage.getItem(getCurrentDate()+'_PSC'));
+			//PSC_Coupun_Show_Coutner();
+			let Coupon = 'М-'+Math.abs(paid_services_counter-medcom);
+			let Service = document.activeElement.innerText;
+			let Room = document.activeElement.previousElementSibling.innerText;
+			if (parseInt(localStorage.getItem(getCurrentDate()+'_PSC')) <= 0) 
+			{
+				document.querySelector('._PSC').disabled = true;
+			}
+			GeneratePrintForm(Coupon,Service,Room,2);
+		}
+		function ShowTime() // показываем время в форме time_form
+		{
+			let SecondTime = getTime(); // получаем значение текущего времени
+			if (SecondTime == '00:00:00') // если терминал работает 24\7, то мы обзаны сразу обновить время и переинициализировать новые счётчики талонов
+			{
+				InititalizeCounter();
+				ShowDate();
+			}
+			Chech_DateTime_And_Counters();
+			document.querySelector('.time_form').innerText = SecondTime;
+		}
+		function ShowDate() // показываем дату в формах date_form и week_form
+		{
+			document.querySelector('.date_form').innerText = getRussianDate();
+			document.querySelector('.week_form').innerText = getRussianDayOfWeek();
+		}
+		function Show_PSC_Form()
+		{
+			document.querySelector('.form_PSC').classList.remove('hidden_Elem');
+			Global_PSC_Submenu_Timer = setTimeout(Hidden_PSC_Form,30000);
+		}
+		function Hidden_PSC_Form()
+		{
+			clearTimeout(Global_PSC_Submenu_Timer);
+			document.querySelector('.form_PSC').classList.add('hidden_Elem');
+		}
+		function GeneratePrintForm(Coupon, Service, Room, Area)
+		{
+			document.querySelector('.Coupon_number').innerText = Coupon;
+			document.querySelector('.Service_name').innerText = Service;
+			document.querySelector('.Room_number').innerText = Room;
+			document.querySelector('.bottom_elem').innerText = document.querySelector('.time_form').innerText+' '+getCurrentDate();
+			window.print();
+			AfterPrintPlug(Area,Coupon);
+		}
+		function HideAfterPrintPlug()
+		{
+			document.querySelector(".Timeout_form").classList.add('hidden_Elem');
+			//document.querySelector(".PrintForm").classList.remove('PrintFormTimeout')
+		}
+		function AfterPrintPlug(Area, Coupon)
+		{
+			switch(Area)
+			{
+				case 2:
+					Hidden_PSC_Form();
+					break;
+			}
+			document.querySelector(".PrintFormTimeoutNumber").innerText = Coupon;
+			document.querySelector(".Timeout_form ").classList.remove('hidden_Elem');
+
+			let TimerPlug = setTimeout(HideAfterPrintPlug,5000);
+		}
+	</script>
+	<style type="text/css">
+		body
+		{
+			background-image: url(pict.jpg); 
+			margin: 0px;
+		}
+		.time_area
+		{
+			font-size: 2.5em;
+			position: fixed;
+    		width: 100%;
+    		height: 10%;
+    		display: flex;
+		    flex-direction: column;
+		    flex-wrap: nowrap;
+		    align-content: center;
+		    align-items: center;
+		    justify-content: center;
+		    /*background: #62ff88;*/
+		}
+		.main_menu_area
+		{
+			display: flex;
+		    flex-direction: column;
+		    flex-wrap: nowrap;
+		    align-content: center;
+		    justify-content: flex-start;
+		    align-items: center;
+			position: fixed;
+		    bottom: 0;
+		    height: 90%;
+		    width: 100%;
+		    /*background: #e5f4e7;*/
+		}
+		.main_menu_categories
+		{
+		    display: flex;
+		    row-gap: 10%;
+		    flex-direction: row;
+		    flex-wrap: wrap;
+		    align-content: flex-start;
+		    justify-content: space-around;
+		    height: 85%;
+		    width: 100%;
+		    align-items: center;
+		}
+		.main_menu_form
+		{
+			width: 100%;
+			height: 15%;
+			text-align: center;
+			font-size: 2.75em;
+			font-weight: bold;
+			/*background: linear-gradient(180deg, #62ff88, transparent);*/
+		}
+		.sub_menu
+		{
+			width: 33.3%;
+			height: 33%;
+			text-align: center;
+		}
+		.sub_menu_form
+		{
+			position: absolute;
+		    width: 100%;
+		    height: 100%;
+		    z-index: 10;
+		    top: 15%;
+   			bottom: 0;
+   			background: #e5f4e7;
+   			display: flex;
+		    flex-direction: column;
+		    flex-wrap: nowrap;
+		    align-content: center;
+		    justify-content: flex-start;
+		    align-items: stretch;
+		}
+		.hidden_Elem
+		{
+			display: none!important;
+		}
+		.main_menu_area button
+		{
+			margin: 2%;
+		    height: 70%;
+		    min-width: 25%;
+		    width: -webkit-fill-available;
+		    font-size: 2.4em;
+		    border-radius: 3%;
+		    border: 1px solid lightgray;
+		    background: linear-gradient(1deg, #0080f5f7, #8eaaf9);
+		}
+		.main_menu_area button:disabled
+		{
+			background: red!important;
+			opacity: 0.5;
+			color: black;
+		}
+		.main_menu_area button:active
+		{
+			box-shadow: inset 0px 3px 8px rgba(0, 0, 0, 0.3);
+ 			transform: translateY(2px);
+		}
+		.sub_menu div, .sub_menu a
+		{
+			font-size: 1.5em;
+		}
+		.sub_menu_button_area
+		{
+			margin-top: -25%;
+			row-gap: 5%;
+		    display: flex;
+		    flex-direction: row;
+		    flex-wrap: wrap;
+		    align-content: center;
+		    justify-content: center;
+		    align-items: center;
+		    height: -webkit-fill-available;
+		}
+		.maim_menu_button_form
+		{
+			z-index: 9000;
+			height: 30%;
+		    text-align: center;
+		    display: flex;
+		    flex-direction: column;
+		    flex-wrap: nowrap;
+		    align-content: stretch;
+		    align-items: center;
+		    justify-content: flex-start;
+		}
+		.maim_menu_button_form div
+		{
+		    margin: 0;
+		    font-size: 2.5em;
+		    font-weight: bold;
+		    width: 100%;
+		    border: 3px solid black;
+		    background: white;
+		}
+		.maim_menu_button_form button
+		{
+			margin: 0!important;
+		}
+		.Timeout_form
+		{
+			z-index: 200;
+		    position: fixed;
+		    height: 100%;
+		    width: 100%;
+		    background: #63c8f9f2;
+		    text-align: center;
+		    display: flex;
+		    flex-direction: column;
+		    flex-wrap: nowrap;
+		    justify-content: center;
+		    align-items: center;
+		    font-size: 4em;
+		    font-weight: bold;
+		}
+		.PrintForm
+		{
+			display: none;
+		}
+		@media screen and (max-height: 1081px)
+		{
+			.sub_menu_button_area
+			{
+				margin-top: auto; 
+			}
+			.time_area
+			{
+				font-size: 1.75em;
+			}
+			.sub_menu_button_area
+			{
+				align-content: flex-start;
+			}
+			.main_menu_form
+			{
+				font-size: 1.75em;
+			}
+		}
+		@media print
+		{
+			.main_form_area, .sub_menu
+			{
+				display: none!important;
+			}
+			.PrintForm
+			{
+				background: white;
+			    position: fixed;
+			    top: 0;
+			    left: 0;
+			    width: 80mm;
+			    height: 80mm;
+			    z-index: 1500;
+			    display: flex;
+			    flex-direction: column;
+			    flex-wrap: nowrap;
+			    align-content: center;
+			    align-items: center;
+			    justify-content: space-between;
+			    text-align: center;
+			    border: 1px solid black; 
+			}
+			.Coupon_number
+			{
+				font-size: 50px;
+				font-weight: bold;
+			}
+			.Service_name
+			{
+				font-size: 25px;
+			}
+		}
+		.room
+		{
+			height: 15%;
+			font-size: 2em!important;
+		}
+	</style>
+</head>
+<body>
+	<div class="main_form_area">
+ 		<div class="time_area">
+ 			<div class="week_form"></div>
+ 			<div class="time_form"></div>
+ 			<div class="date_form"></div>
+ 		</div>
+ 		<div class="main_menu_area">
+ 			<div class="main_menu_form">
+ 				ОБУЗ Курская городска поликлиника № 5
+				<p>г. Курск, ул. Запольная, 43А
+ 			</div>
+ 			<div class="main_menu_categories">
+ 				<div class="sub_menu">
+ 					<div class="room">Кабинет № 101</div>
+ 					<button class="_MEO" onclick="Get_MEO_Coupon()">Военкомат</button>
+ 				</div>
+ 				<div class="sub_menu">
+ 					<div class="room">Кабинет № 101</div>
+ 					<button class="_MEO" onclick="Get_MEO_Coupon()">Получить справку</button>
+ 					<div><div class="label_MEO">Осталось талонов:</div><a class="counter_MEO"></a></div>
+ 				</div>
+ 				<div class="sub_menu">
+ 					<div class="room">Кабинет № 101</div>
+ 					<button class="_MEO" onclick="Get_MEO_Coupon()">Получить выписку</button>
+ 					
+ 				</div>
+ 				<div class="sub_menu">
+ 					<div class="room">&nbsp</div>
+ 					<button class="_ME" onclick="Get_ME_Coupon()">Диспансеризация</button>
+ 					<div><div class="label_ME"></div><a class="counter_ME"></a></div>
+ 				</div>
+  				<div class="sub_menu">
+  					<div class="room">Кабинет платных услуг № 101</div>
+ 					<button class="_PSC" onclick="Show_PSC_Form()">Медкомиссия</button>
+ 					<div><div class="label_PSC">Осталось талонов:</div><a class="counter_PSC"></a></div>
+ 				</div>
+ 				<div class="sub_menu_form hidden_Elem form_PSC">
+ 					<div class="maim_menu_button_form">
+ 						<button onclick="Hidden_PSC_Form()">Назад</button>
+ 						<div>Запись на медкомиссию</div>
+ 					</div>
+ 					<div class="sub_menu_button_area">
+	 					<div class="sub_menu">
+	 						<div class="room">Кабинет № 101</div>
+	 						<button class="_PSC" onclick="Get_PSC_Coupon()">Оружие</button>
+	 					</div>
+	 					<div class="sub_menu">
+	 						<div class="room">Кабинет № 101</div>
+	 						<button class="_PSC" onclick="Get_PSC_Coupon()">Водительское удостоверение</button>
+	 					</div>
+	 					<div class="sub_menu">
+	 						<div class="room">Кабинет № 101</div>
+	 						<button class="_PSC" onclick="Get_PSC_Coupon()">Опекунство</button>
+	 					</div>
+	 					<div class="sub_menu">
+	 						<div class="room">Кабинет № 101</div>
+	 						<button class="_PSC" onclick="Get_PSC_Coupon()">Направление от работодателя</button>
+	 					</div>
+	 				</div>
+ 				</div>
+ 			</div>
+ 		</div>
+	</div>
+	<div class="Timeout_form hidden_Elem">
+		<div>Ваш талон номер <a class="PrintFormTimeoutNumber">d</a>.</div>
+		<div>Пожалуйста, соблюдайте очередь.</div>
+	</div>
+	<div class="PrintForm">
+		<a class="top_elem">ОБУЗ Курская городска поликлиника № 5</a>
+		Талон <div class="Coupon_number"></div>
+		<div class="Service_name"></div>
+		<div class="Room_number"></div>
+		<a class="bottom_elem"></a>
+	</div>
+</body>
+</html>
